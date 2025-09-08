@@ -205,12 +205,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (!isAuthenticated || !user) return;
 
     setIsLoading(true);
-    const entrepriseId = user.id;
+    // Pour les utilisateurs gérés, utiliser l'ID de l'entreprise, sinon l'ID de l'utilisateur admin
+    const entrepriseId = user.isAdmin ? user.id : user.company.name; // Utiliser un identifiant commun
+    
+    // Si c'est un utilisateur géré, on doit récupérer l'ID de l'entreprise depuis les données
+    let actualEntrepriseId = entrepriseId;
+    if (!user.isAdmin) {
+      // Pour les utilisateurs gérés, on utilise l'entrepriseId stocké dans leurs données
+      // qui correspond à l'ID du compte admin qui les a créés
+      actualEntrepriseId = user.id.includes('managed_') ? user.id.split('_')[1] : user.id;
+    }
 
     // Clients
     const clientsQuery = query(
       collection(db, 'clients'),
-      where('entrepriseId', '==', entrepriseId)
+      where('entrepriseId', '==', actualEntrepriseId)
     );
     const unsubscribeClients = onSnapshot(clientsQuery, (snapshot) => {
       const clientsData = snapshot.docs.map(doc => ({
@@ -223,7 +232,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // Produits
     const productsQuery = query(
       collection(db, 'products'),
-      where('entrepriseId', '==', entrepriseId)
+      where('entrepriseId', '==', actualEntrepriseId)
     );
     const unsubscribeProducts = onSnapshot(productsQuery, (snapshot) => {
       const productsData = snapshot.docs.map(doc => ({
@@ -236,7 +245,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // Factures
     const invoicesQuery = query(
       collection(db, 'invoices'),
-      where('entrepriseId', '==', entrepriseId)
+      where('entrepriseId', '==', actualEntrepriseId)
     );
     const unsubscribeInvoices = onSnapshot(invoicesQuery, (snapshot) => {
       const invoicesData = snapshot.docs.map(doc => ({
@@ -249,7 +258,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // Devis
     const quotesQuery = query(
       collection(db, 'quotes'),
-      where('entrepriseId', '==', entrepriseId)
+      where('entrepriseId', '==', actualEntrepriseId)
     );
     const unsubscribeQuotes = onSnapshot(quotesQuery, (snapshot) => {
       const quotesData = snapshot.docs.map(doc => ({
@@ -263,7 +272,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // Employés
     const employeesQuery = query(
       collection(db, 'employees'),
-      where('entrepriseId', '==', entrepriseId)
+      where('entrepriseId', '==', actualEntrepriseId)
     );
     const unsubscribeEmployees = onSnapshot(employeesQuery, (snapshot) => {
       const employeesData = snapshot.docs.map(doc => ({
@@ -276,7 +285,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // Heures supplémentaires
     const overtimesQuery = query(
       collection(db, 'overtimes'),
-      where('entrepriseId', '==', entrepriseId)
+      where('entrepriseId', '==', actualEntrepriseId)
     );
     const unsubscribeOvertimes = onSnapshot(overtimesQuery, (snapshot) => {
       const overtimesData = snapshot.docs.map(doc => ({
@@ -289,7 +298,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // Congés
     const leavesQuery = query(
       collection(db, 'leaves'),
-      where('entrepriseId', '==', entrepriseId)
+      where('entrepriseId', '==', actualEntrepriseId)
     );
     const unsubscribeLeaves = onSnapshot(leavesQuery, (snapshot) => {
       const leavesData = snapshot.docs.map(doc => ({
@@ -379,10 +388,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const addClient = async (clientData: Omit<Client, 'id' | 'createdAt' | 'entrepriseId'>) => {
     if (!user) return;
     
+    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
+    const entrepriseId = user.isAdmin ? user.id : user.id.split('_')[1] || user.id;
+    
     try {
       await addDoc(collection(db, 'clients'), {
         ...clientData,
-        entrepriseId: user.id,
+        entrepriseId: entrepriseId,
         createdAt: new Date().toISOString()
       });
     } catch (error) {
@@ -413,6 +425,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const addProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'entrepriseId'>) => {
     if (!user) return;
     
+    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
+    const entrepriseId = user.isAdmin ? user.id : user.id.split('_')[1] || user.id;
+    
     try {
       // Générer un SKU automatique si pas fourni
       const sku = generateSKU(productData.name, productData.category);
@@ -420,7 +435,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       await addDoc(collection(db, 'products'), {
         ...productData,
         sku,
-        entrepriseId: user.id,
+        entrepriseId: entrepriseId,
         createdAt: new Date().toISOString()
       });
     } catch (error) {
@@ -459,6 +474,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const addInvoice = async (invoiceData: Omit<Invoice, 'id' | 'number' | 'createdAt' | 'entrepriseId' | 'dueDate' | 'totalInWords'>, invoiceDate?: string) => {
     if (!user) return;
     
+    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
+    const entrepriseId = user.isAdmin ? user.id : user.id.split('_')[1] || user.id;
+    
     try {
       // Passer la date de la facture pour la numérotation
       const invoiceNumber = generateInvoiceNumber(invoiceData.date);
@@ -470,7 +488,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         number: invoiceNumber,
         totalInWords,
         status: 'unpaid', // Statut par défaut
-        entrepriseId: user.id,
+        entrepriseId: entrepriseId,
         createdAt: new Date().toISOString()
       });
 
@@ -504,6 +522,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const addQuote = async (quoteData: Omit<Quote, 'id' | 'number' | 'createdAt' | 'entrepriseId' | 'totalInWords'>, quoteDate?: string) => {
     if (!user) return;
     
+    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
+    const entrepriseId = user.isAdmin ? user.id : user.id.split('_')[1] || user.id;
+    
     try {
       // Passer la date du devis pour la numérotation
       const quoteNumber = generateQuoteNumber(quoteData.date);
@@ -513,7 +534,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         ...quoteData,
         number: quoteNumber,
         totalInWords,
-        entrepriseId: user.id,
+        entrepriseId: entrepriseId,
         createdAt: new Date().toISOString()
       });
     } catch (error) {
@@ -572,10 +593,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const addEmployee = async (employeeData: Omit<Employee, 'id' | 'createdAt' | 'entrepriseId'>) => {
     if (!user) return;
     
+    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
+    const entrepriseId = user.isAdmin ? user.id : user.id.split('_')[1] || user.id;
+    
     try {
       await addDoc(collection(db, 'employees'), {
         ...employeeData,
-        entrepriseId: user.id,
+        entrepriseId: entrepriseId,
         createdAt: new Date().toISOString()
       });
     } catch (error) {
@@ -606,10 +630,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const addOvertime = async (overtimeData: Omit<Overtime, 'id' | 'createdAt' | 'entrepriseId'>) => {
     if (!user) return;
     
+    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
+    const entrepriseId = user.isAdmin ? user.id : user.id.split('_')[1] || user.id;
+    
     try {
       await addDoc(collection(db, 'overtimes'), {
         ...overtimeData,
-        entrepriseId: user.id,
+        entrepriseId: entrepriseId,
         createdAt: new Date().toISOString()
       });
     } catch (error) {
@@ -640,10 +667,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const addLeave = async (leaveData: Omit<Leave, 'id' | 'createdAt' | 'entrepriseId'>) => {
     if (!user) return;
     
+    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
+    const entrepriseId = user.isAdmin ? user.id : user.id.split('_')[1] || user.id;
+    
     try {
       await addDoc(collection(db, 'leaves'), {
         ...leaveData,
-        entrepriseId: user.id,
+        entrepriseId: entrepriseId,
         createdAt: new Date().toISOString()
       });
     } catch (error) {
