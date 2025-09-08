@@ -118,7 +118,7 @@ export function UserManagementProvider({ children }: { children: ReactNode }) {
       await addDoc(collection(db, 'managedUsers'), {
         ...userData,
         createdBy: user.id,
-        entrepriseId: user.id,
+        entrepriseId: user.id, // L'ID de l'admin qui crée l'utilisateur
         createdAt: new Date().toISOString()
       });
     } catch (error) {

@@ -1,756 +1,404 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { 
-  collection, 
-  doc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  getDocs, 
-  query, 
-  where, 
-  orderBy,
-  onSnapshot
-} from 'firebase/firestore';
-import { db } from '../config/firebase';
-import { useAuth } from './AuthContext';
-import { convertNumberToWords } from '../utils/numberToWords';
+  User as FirebaseUser,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
+} from 'firebase/auth';
+import { doc, getDoc, setDoc, updateDoc, query, collection, where, getDocs } from 'firebase/firestore';
+import { auth, db } from '../config/firebase';
+import { ManagedUser } from './UserManagementContext';
 
-export interface Client {
-  id: string;
+interface Company {
   name: string;
   ice: string;
+  if: string;
+  rc: string;
+  cnss: string;
   address: string;
   phone: string;
   email: string;
-  createdAt: string;
-  entrepriseId: string;
+  patente: string;
+  website: string;
+  logo?: string;
+  signature?: string;
+  invoiceNumberingFormat?: string;
+  invoicePrefix?: string;
+  invoiceCounter?: number;
+  lastInvoiceYear?: number;
+  defaultTemplate?: string;
+  subscription?: 'free' | 'pro';
+  subscriptionDate?: string;
+  expiryDate?: string;
 }
 
-export interface Product {
+interface User {
   id: string;
   name: string;
-  sku: string;
-  category: string;
-  purchasePrice: number;
-  salePrice: number;
-  unit: string;
-  stock: number;
-  minStock: number;
-  status: 'active' | 'inactive';
-  createdAt: string;
-  entrepriseId: string;
-}
-
-export interface Quote {
-  id: string;
-  number: string;
-  clientId: string;
-  client: Client;
-  date: string;
-  validUntil: string;
-  items: QuoteItem[];
-  subtotal: number;
-  totalVat: number;
-  totalTTC: number;
-  totalInWords: string;
-  status: 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired';
-  createdAt: string;
-  entrepriseId: string;
-}
-
-export interface QuoteItem {
-  id: string;
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  vatRate: number;
-  total: number;
-  unit?: string;
-}
-
-export interface Invoice {
-  id: string;
-  number: string;
-  clientId: string;
-  client: Client;
-  date: string;
-  dueDate: string;
-  items: InvoiceItem[];
-  subtotal: number;
-  totalVat: number;
-  totalTTC: number;
-  totalInWords: string;
-  status: 'draft' | 'sent' | 'unpaid' | 'paid' | 'collected';
-  paymentMethod?: 'virement' | 'espece' | 'cheque' | 'effet';
-  collectionDate?: string;
-  collectionType?: 'cheque' | 'effet';
-  createdAt: string;
-  quoteId?: string;
-  entrepriseId: string;
-}
-
-export interface InvoiceItem {
-  id: string;
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  vatRate: number;
-  total: number;
-  unit?: string;
-}
-
-export interface Employee {
-  id: string;
-  firstName: string;
-  lastName: string;
-  position: string;
   email: string;
-  phone: string;
-  hireDate: string;
-  baseSalary: number;
-  annualLeaveDays: number;
-  status: 'active' | 'inactive';
-  createdAt: string;
-  entrepriseId: string;
+  role: 'admin' | 'user';
+  isAdmin: boolean;
+  permissions?: {
+    dashboard: boolean;
+    invoices: boolean;
+    quotes: boolean;
+    clients: boolean;
+    products: boolean;
+    suppliers: boolean;
+    stockManagement: boolean;
+    supplierManagement: boolean;
+    hrManagement: boolean;
+    reports: boolean;
+    settings: boolean;
+  };
+  company: Company;
 }
 
-export interface Overtime {
-  id: string;
-  employeeId: string;
-  employee: Employee;
-  date: string;
-  hours: number;
-  rate: number;
-  total: number;
-  description?: string;
-  createdAt: string;
-  entrepriseId: string;
-}
-
-export interface Leave {
-  id: string;
-  employeeId: string;
-  employee: Employee;
-  startDate: string;
-  endDate: string;
-  type: 'annual' | 'sick' | 'maternity' | 'other';
-  days: number;
-  status: 'pending' | 'approved' | 'rejected';
-  reason?: string;
-  createdAt: string;
-  entrepriseId: string;
-}
-interface DataContextType {
-  clients: Client[];
-  products: Product[];
-  invoices: Invoice[];
-  quotes: Quote[];
-  employees: Employee[];
-  overtimes: Overtime[];
-  leaves: Leave[];
-  addClient: (client: Omit<Client, 'id' | 'createdAt' | 'entrepriseId'>) => Promise<void>;
-  updateClient: (id: string, client: Partial<Client>) => Promise<void>;
-  deleteClient: (id: string) => Promise<void>;
-  addProduct: (product: Omit<Product, 'id' | 'createdAt' | 'entrepriseId'>) => Promise<void>;
-  updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
-  deleteProduct: (id: string) => Promise<void>;
-  addInvoice: (invoice: Omit<Invoice, 'id' | 'number' | 'createdAt' | 'entrepriseId'>) => Promise<void>;
-  updateInvoice: (id: string, invoice: Partial<Invoice>) => Promise<void>;
-  deleteInvoice: (id: string) => Promise<void>;
-  addQuote: (quote: Omit<Quote, 'id' | 'number' | 'createdAt' | 'entrepriseId'>) => Promise<void>;
-  updateQuote: (id: string, quote: Partial<Quote>) => Promise<void>;
-  deleteQuote: (id: string) => Promise<void>;
-  convertQuoteToInvoice: (quoteId: string) => Promise<void>;
-  updateProductStock: (productName: string, quantity: number) => Promise<void>;
-  addEmployee: (employee: Omit<Employee, 'id' | 'createdAt' | 'entrepriseId'>) => Promise<void>;
-  updateEmployee: (id: string, employee: Partial<Employee>) => Promise<void>;
-  deleteEmployee: (id: string) => Promise<void>;
-  addOvertime: (overtime: Omit<Overtime, 'id' | 'createdAt' | 'entrepriseId'>) => Promise<void>;
-  updateOvertime: (id: string, overtime: Partial<Overtime>) => Promise<void>;
-  deleteOvertime: (id: string) => Promise<void>;
-  addLeave: (leave: Omit<Leave, 'id' | 'createdAt' | 'entrepriseId'>) => Promise<void>;
-  updateLeave: (id: string, leave: Partial<Leave>) => Promise<void>;
-  deleteLeave: (id: string) => Promise<void>;
-  getClientById: (id: string) => Client | undefined;
-  getProductById: (id: string) => Product | undefined;
-  getInvoiceById: (id: string) => Invoice | undefined;
-  getQuoteById: (id: string) => Quote | undefined;
-  getEmployeeById: (id: string) => Employee | undefined;
+interface AuthContextType {
+  user: User | null;
+  firebaseUser: FirebaseUser | null;
+  isAuthenticated: boolean;
+  login: (email: string, password: string) => Promise<boolean>;
+  register: (email: string, password: string, companyData: Company) => Promise<boolean>;
+  logout: () => Promise<void>;
+  upgradeSubscription: () => Promise<void>;
+  updateCompanySettings: (settings: Partial<Company>) => Promise<void>;
+  checkSubscriptionExpiry: () => Promise<void>;
   isLoading: boolean;
+  showExpiryAlert: boolean;
+  setShowExpiryAlert: (show: boolean) => void;
+  expiredDate: string | null;
 }
 
-const DataContext = createContext<DataContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function DataProvider({ children }: { children: ReactNode }) {
-  const { user, isAuthenticated } = useAuth();
-  const [clients, setClients] = useState<Client[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [quotes, setQuotes] = useState<Quote[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [overtimes, setOvertimes] = useState<Overtime[]>([]);
-  const [leaves, setLeaves] = useState<Leave[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showExpiryAlert, setShowExpiryAlert] = useState(false);
+  const [expiredDate, setExpiredDate] = useState<string | null>(null);
 
-  // Générer un SKU automatique pour les produits
-  const generateSKU = (name: string, category: string) => {
-    const categoryPrefix = category ? category.substring(0, 3).toUpperCase() : 'PRD';
-    const namePrefix = name.substring(0, 3).toUpperCase();
-    const timestamp = Date.now().toString().slice(-4);
-    return `${categoryPrefix}-${namePrefix}-${timestamp}`;
+  // Fonction pour vérifier si un utilisateur géré existe
+  const checkManagedUser = async (email: string, password: string): Promise<ManagedUser | null> => {
+    try {
+      const managedUsersQuery = query(
+        collection(db, 'managedUsers'),
+        where('email', '==', email),
+        where('password', '==', password),
+        where('status', '==', 'active')
+      );
+      
+      const snapshot = await getDocs(managedUsersQuery);
+      if (!snapshot.empty) {
+        const userData = snapshot.docs[0].data() as ManagedUser;
+        return {
+          id: snapshot.docs[0].id,
+          ...userData
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('Erreur lors de la vérification de l\'utilisateur géré:', error);
+      return null;
+    }
   };
 
-  // Écouter les changements en temps réel
-  useEffect(() => {
-    if (!isAuthenticated || !user) return;
-
-    setIsLoading(true);
-    // Pour les utilisateurs gérés, utiliser l'ID de l'entreprise, sinon l'ID de l'utilisateur admin
-    const entrepriseId = user.isAdmin ? user.id : user.company.name; // Utiliser un identifiant commun
-    
-    // Si c'est un utilisateur géré, on doit récupérer l'ID de l'entreprise depuis les données
-    let actualEntrepriseId = entrepriseId;
-    if (!user.isAdmin) {
-      // Pour les utilisateurs gérés, on utilise l'entrepriseId stocké dans leurs données
-      // qui correspond à l'ID du compte admin qui les a créés
-      actualEntrepriseId = user.id.includes('managed_') ? user.id.split('_')[1] : user.id;
+  const checkSubscriptionExpiry = async (userId: string, userData: any) => {
+    if (userData.subscription === 'pro' && userData.expiryDate) {
+      const currentDate = new Date();
+      const expiryDate = new Date(userData.expiryDate);
+      
+      if (currentDate > expiryDate) {
+        // L'abonnement a expiré, repasser en version gratuite
+        try {
+          await updateDoc(doc(db, 'entreprises', userId), {
+            subscription: 'free',
+            subscriptionDate: new Date().toISOString(),
+            expiryDate: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+          
+          // Mettre à jour l'état local
+          setUser(prevUser => {
+            if (prevUser) {
+              return {
+                ...prevUser,
+                company: {
+                  ...prevUser.company,
+                  subscription: 'free',
+                  subscriptionDate: new Date().toISOString(),
+                  expiryDate: new Date().toISOString()
+                }
+              };
+            }
+            return prevUser;
+          });
+          
+          // Préparer l'alerte d'expiration
+          setExpiredDate(userData.expiryDate);
+          setShowExpiryAlert(true);
+          
+        } catch (error) {
+          console.error('Erreur lors de la mise à jour de l\'expiration:', error);
+        }
+      }
     }
+  };
 
-    // Clients
-    const clientsQuery = query(
-      collection(db, 'clients'),
-      where('entrepriseId', '==', actualEntrepriseId)
-    );
-    const unsubscribeClients = onSnapshot(clientsQuery, (snapshot) => {
-      const clientsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Client)).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setClients(clientsData);
-    });
-
-    // Produits
-    const productsQuery = query(
-      collection(db, 'products'),
-      where('entrepriseId', '==', actualEntrepriseId)
-    );
-    const unsubscribeProducts = onSnapshot(productsQuery, (snapshot) => {
-      const productsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Product)).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setProducts(productsData);
-    });
-
-    // Factures
-    const invoicesQuery = query(
-      collection(db, 'invoices'),
-      where('entrepriseId', '==', actualEntrepriseId)
-    );
-    const unsubscribeInvoices = onSnapshot(invoicesQuery, (snapshot) => {
-      const invoicesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Invoice)).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setInvoices(invoicesData);
-    });
-
-    // Devis
-    const quotesQuery = query(
-      collection(db, 'quotes'),
-      where('entrepriseId', '==', actualEntrepriseId)
-    );
-    const unsubscribeQuotes = onSnapshot(quotesQuery, (snapshot) => {
-      const quotesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Quote)).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setQuotes(quotesData);
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        setFirebaseUser(firebaseUser);
+        // Récupérer les données utilisateur depuis Firestore
+        try {
+          const userDoc = await getDoc(doc(db, 'entreprises', firebaseUser.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setUser({
+              id: firebaseUser.uid,
+              name: userData.ownerName || firebaseUser.email?.split('@')[0] || 'Utilisateur',
+              email: firebaseUser.email || '',
+              role: 'admin',
+              isAdmin: true,
+              company: {
+                name: userData.name,
+                ice: userData.ice,
+                if: userData.if,
+                rc: userData.rc,
+                cnss: userData.cnss,
+                address: userData.address,
+                phone: userData.phone,
+                logo: userData.logo,
+                email: userData.email,
+                signature: userData.signature || "",
+                patente: userData.patente,
+                website: userData.website,
+                invoiceNumberingFormat: userData.invoiceNumberingFormat,
+                invoicePrefix: userData.invoicePrefix,
+                invoiceCounter: userData.invoiceCounter,
+                lastInvoiceYear: userData.lastInvoiceYear,
+                defaultTemplate: userData.defaultTemplate || 'template1',
+                subscription: userData.subscription || 'free',
+                subscriptionDate: userData.subscriptionDate,
+                expiryDate: userData.expiryDate
+              }
+            });
+            
+            // Vérifier l'expiration de l'abonnement à chaque connexion
+            await checkSubscriptionExpiry(firebaseUser.uid, userData);
+          }
+        } catch (error) {
+          console.error('Erreur lors de la récupération des données utilisateur:', error);
+        }
+      } else {
+        setFirebaseUser(null);
+        setUser(null);
+      }
       setIsLoading(false);
     });
 
-    // Employés
-    const employeesQuery = query(
-      collection(db, 'employees'),
-      where('entrepriseId', '==', actualEntrepriseId)
-    );
-    const unsubscribeEmployees = onSnapshot(employeesQuery, (snapshot) => {
-      const employeesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Employee)).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setEmployees(employeesData);
-    });
+    return () => unsubscribe();
+  }, []);
 
-    // Heures supplémentaires
-    const overtimesQuery = query(
-      collection(db, 'overtimes'),
-      where('entrepriseId', '==', actualEntrepriseId)
-    );
-    const unsubscribeOvertimes = onSnapshot(overtimesQuery, (snapshot) => {
-      const overtimesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Overtime)).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setOvertimes(overtimesData);
-    });
-
-    // Congés
-    const leavesQuery = query(
-      collection(db, 'leaves'),
-      where('entrepriseId', '==', actualEntrepriseId)
-    );
-    const unsubscribeLeaves = onSnapshot(leavesQuery, (snapshot) => {
-      const leavesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Leave)).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setLeaves(leavesData);
-    });
-    return () => {
-      unsubscribeClients();
-      unsubscribeProducts();
-      unsubscribeInvoices();
-      unsubscribeQuotes();
-      unsubscribeEmployees();
-      unsubscribeOvertimes();
-      unsubscribeLeaves();
-    };
-  }, [isAuthenticated, user]);
-
-  const generateInvoiceNumber = (invoiceDate?: string) => {
-    if (!user?.company) return 'FAC-2025-001';
-    
-    // Utiliser l'année de la date de la facture au lieu de l'année actuelle
-    const invoiceYear = new Date(invoiceDate || new Date()).getFullYear();
-    const format = user.company.invoiceNumberingFormat || 'format2';
-    const prefix = user.company.invoicePrefix || 'FAC';
-    
-    // Compter les factures existantes pour cette année spécifique
-    const yearInvoices = invoices.filter(invoice => 
-      new Date(invoice.date).getFullYear() === invoiceYear
-    );
-    const counter = yearInvoices.length + 1;
-    const counterStr = String(counter).padStart(3, '0');
-    
-    // Note: Plus besoin de mettre à jour un compteur global car on compte dynamiquement
-    
-    // Générer le numéro selon le format choisi
-    switch (format) {
-      case 'format1': // 2025-001
-        return `${invoiceYear}-${counterStr}`;
-      case 'format2': // FAC-2025-001
-        return `${prefix}-${invoiceYear}-${counterStr}`;
-      case 'format3': // 001/2025
-        return `${counterStr}/${invoiceYear}`;
-      case 'format4': // 2025/001-FAC
-        return `${invoiceYear}/${counterStr}-${prefix}`;
-      case 'format5': // FAC001-2025
-        return `${prefix}${counterStr}-${invoiceYear}`;
-      default:
-        return `${prefix}-${invoiceYear}-${counterStr}`;
-    }
-  };
-
-  const generateQuoteNumber = (quoteDate?: string) => {
-    if (!user?.company) return 'DEV-2025-001';
-    
-    // Utiliser l'année de la date du devis
-    const quoteYear = new Date(quoteDate || new Date()).getFullYear();
-    const format = user.company.invoiceNumberingFormat || 'format2';
-    const prefix = 'DEV'; // Préfixe fixe pour les devis
-    
-    // Compter les devis de l'année spécifique pour la numérotation
-    const yearQuotes = quotes.filter(quote => 
-      new Date(quote.date).getFullYear() === quoteYear
-    );
-    const counter = yearQuotes.length + 1;
-    const counterStr = String(counter).padStart(3, '0');
-    
-    // Générer le numéro selon le même format que les factures
-    switch (format) {
-      case 'format1': // 2025-001
-        return `${quoteYear}-${counterStr}`;
-      case 'format2': // DEV-2025-001
-        return `${prefix}-${quoteYear}-${counterStr}`;
-      case 'format3': // 001/2025
-        return `${counterStr}/${quoteYear}`;
-      case 'format4': // 2025/001-DEV
-        return `${quoteYear}/${counterStr}-${prefix}`;
-      case 'format5': // DEV001-2025
-        return `${prefix}${counterStr}-${quoteYear}`;
-      default:
-        return `${prefix}-${quoteYear}-${counterStr}`;
-    }
-  };
-
-  // Clients
-  const addClient = async (clientData: Omit<Client, 'id' | 'createdAt' | 'entrepriseId'>) => {
-    if (!user) return;
-    
-    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
-    const entrepriseId = user.isAdmin ? user.id : user.id.split('_')[1] || user.id;
-    
+  const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      await addDoc(collection(db, 'clients'), {
-        ...clientData,
-        entrepriseId: entrepriseId,
-        createdAt: new Date().toISOString()
-      });
-    } catch (error) {
-      console.error('Erreur lors de l\'ajout du client:', error);
-    }
-  };
-
-  const updateClient = async (id: string, clientData: Partial<Client>) => {
-    try {
-      await updateDoc(doc(db, 'clients', id), {
-        ...clientData,
-        updatedAt: new Date().toISOString()
-      });
-    } catch (error) {
-      console.error('Erreur lors de la mise à jour du client:', error);
-    }
-  };
-
-  const deleteClient = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'clients', id));
-    } catch (error) {
-      console.error('Erreur lors de la suppression du client:', error);
-    }
-  };
-
-  // Produits
-  const addProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'entrepriseId'>) => {
-    if (!user) return;
-    
-    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
-    const entrepriseId = user.isAdmin ? user.id : user.id.split('_')[1] || user.id;
-    
-    try {
-      // Générer un SKU automatique si pas fourni
-      const sku = generateSKU(productData.name, productData.category);
+      // D'abord, vérifier si c'est un utilisateur géré
+      const managedUser = await checkManagedUser(email, password);
       
-      await addDoc(collection(db, 'products'), {
-        ...productData,
-        sku,
-        entrepriseId: entrepriseId,
-        createdAt: new Date().toISOString()
-      });
+      if (managedUser) {
+        // C'est un utilisateur géré, récupérer les données de l'entreprise
+        const companyDoc = await getDoc(doc(db, 'entreprises', managedUser.entrepriseId));
+        if (companyDoc.exists()) {
+          const companyData = companyDoc.data();
+          
+          // Mettre à jour la dernière connexion
+          await updateDoc(doc(db, 'managedUsers', managedUser.id), {
+            lastLogin: new Date().toISOString()
+          });
+          
+          // Créer l'objet utilisateur avec les permissions
+          setUser({
+            id: managedUser.id,
+            name: managedUser.name,
+            email: managedUser.email,
+            role: 'user',
+            isAdmin: false,
+            permissions: managedUser.permissions,
+            company: {
+              name: companyData.name,
+              ice: companyData.ice,
+              if: companyData.if,
+              rc: companyData.rc,
+              cnss: companyData.cnss,
+              address: companyData.address,
+              phone: companyData.phone,
+              logo: companyData.logo,
+              email: companyData.email,
+              signature: companyData.signature || "",
+              patente: companyData.patente,
+              website: companyData.website,
+              invoiceNumberingFormat: companyData.invoiceNumberingFormat,
+              invoicePrefix: companyData.invoicePrefix,
+              invoiceCounter: companyData.invoiceCounter,
+              lastInvoiceYear: companyData.lastInvoiceYear,
+              defaultTemplate: companyData.defaultTemplate || 'template1',
+              subscription: companyData.subscription || 'free',
+              subscriptionDate: companyData.subscriptionDate,
+              expiryDate: companyData.expiryDate
+            }
+          });
+          
+          return true;
+        }
+        return false;
+      }
+
+      // Sinon, essayer la connexion Firebase normale (admin)
+      await signInWithEmailAndPassword(auth, email, password);
+      return true;
     } catch (error) {
-      console.error('Erreur lors de l\'ajout du produit:', error);
+      console.error('Erreur de connexion:', error);
+      return false;
     }
   };
 
-  const updateProduct = async (id: string, productData: Partial<Product>) => {
+  const register = async (email: string, password: string, companyData: Company): Promise<boolean> => {
     try {
-      await updateDoc(doc(db, 'products', id), {
-        ...productData,
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userId = userCredential.user.uid;
+
+      // Sauvegarder les données de l'entreprise dans Firestore
+      await setDoc(doc(db, 'entreprises', userId), {
+        ...companyData,
+        ownerEmail: email,
+        ownerName: email.split('@')[0],
+        subscription: 'free',
+        subscriptionDate: new Date().toISOString(),
+        expiryDate: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
+
+      return true;
     } catch (error) {
-      console.error('Erreur lors de la mise à jour du produit:', error);
+      console.error('Erreur lors de l\'inscription:', error);
+      return false;
     }
   };
 
-  const deleteProduct = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'products', id));
-    } catch (error) {
-      console.error('Erreur lors de la suppression du produit:', error);
-    }
-  };
-
-  const updateProductStock = async (productName: string, quantity: number) => {
-    const product = products.find(p => p.name === productName);
-    if (product) {
-      const newStock = Math.max(0, product.stock - quantity);
-      await updateProduct(product.id, { stock: newStock });
-    }
-  };
-
-  // Factures
-  const addInvoice = async (invoiceData: Omit<Invoice, 'id' | 'number' | 'createdAt' | 'entrepriseId' | 'dueDate' | 'totalInWords'>, invoiceDate?: string) => {
+  const upgradeSubscription = async (): Promise<void> => {
     if (!user) return;
     
-    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
-    const entrepriseId = user.isAdmin ? user.id : user.id.split('_')[1] || user.id;
-    
     try {
-      // Passer la date de la facture pour la numérotation
-      const invoiceNumber = generateInvoiceNumber(invoiceData.date);
+      const currentDate = new Date();
+      const expiryDate = new Date();
+      expiryDate.setDate(currentDate.getDate() + 30); // 30 jours à partir d'aujourd'hui
       
-      const totalInWords = convertNumberToWords(invoiceData.totalTTC);
+      await updateDoc(doc(db, 'entreprises', user.id), {
+        subscription: 'pro',
+        subscriptionDate: currentDate.toISOString(),
+        expiryDate: expiryDate.toISOString(),
+        updatedAt: new Date().toISOString()
+      });
       
-      await addDoc(collection(db, 'invoices'), {
-        ...invoiceData,
-        number: invoiceNumber,
-        totalInWords,
-        status: 'unpaid', // Statut par défaut
-        entrepriseId: entrepriseId,
-        createdAt: new Date().toISOString()
+      // Mettre à jour l'état local
+      setUser(prevUser => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            company: {
+              ...prevUser.company,
+              subscription: 'pro',
+              subscriptionDate: currentDate.toISOString(),
+              expiryDate: expiryDate.toISOString()
+            }
+          };
+        }
+        return prevUser;
       });
-
-      // Note: Le stock initial ne change jamais
-      // Les quantités vendues sont calculées dynamiquement depuis les factures
-    } catch (error) {
-      console.error('Erreur lors de l\'ajout de la facture:', error);
-    }
-  };
-
-  const updateInvoice = async (id: string, invoiceData: Partial<Invoice>) => {
-    try {
-      await updateDoc(doc(db, 'invoices', id), {
-        ...invoiceData,
-        updatedAt: new Date().toISOString()
-      });
-    } catch (error) {
-      console.error('Erreur lors de la mise à jour de la facture:', error);
-    }
-  };
-
-  const deleteInvoice = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'invoices', id));
-    } catch (error) {
-      console.error('Erreur lors de la suppression de la facture:', error);
-    }
-  };
-
-  // Devis
-  const addQuote = async (quoteData: Omit<Quote, 'id' | 'number' | 'createdAt' | 'entrepriseId' | 'totalInWords'>, quoteDate?: string) => {
-    if (!user) return;
-    
-    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
-    const entrepriseId = user.isAdmin ? user.id : user.id.split('_')[1] || user.id;
-    
-    try {
-      // Passer la date du devis pour la numérotation
-      const quoteNumber = generateQuoteNumber(quoteData.date);
-      const totalInWords = convertNumberToWords(quoteData.totalTTC);
       
-      await addDoc(collection(db, 'quotes'), {
-        ...quoteData,
-        number: quoteNumber,
-        totalInWords,
-        entrepriseId: entrepriseId,
-        createdAt: new Date().toISOString()
-      });
     } catch (error) {
-      console.error('Erreur lors de l\'ajout du devis:', error);
+      console.error('Erreur lors de la mise à niveau:', error);
+      throw error;
     }
   };
 
-  const updateQuote = async (id: string, quoteData: Partial<Quote>) => {
-    try {
-      await updateDoc(doc(db, 'quotes', id), {
-        ...quoteData,
-        updatedAt: new Date().toISOString()
-      });
-    } catch (error) {
-      console.error('Erreur lors de la mise à jour du devis:', error);
-    }
-  };
-
-  const deleteQuote = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'quotes', id));
-    } catch (error) {
-      console.error('Erreur lors de la suppression du devis:', error);
-    }
-  };
-
-
-  const convertQuoteToInvoice = async (quoteId: string) => {
-    const quote = quotes.find(q => q.id === quoteId);
-    if (!quote) return;
-
-    const invoiceData = {
-      clientId: quote.clientId,
-      client: quote.client,
-      date: new Date().toISOString().split('T')[0],
-      items: quote.items,
-      subtotal: quote.subtotal,
-      totalVat: quote.totalVat,
-      totalTTC: quote.totalTTC,
-      status: 'draft' as const,
-      quoteId: quote.id
-    };
-
-    await addInvoice(invoiceData);
-    await updateQuote(quoteId, { status: 'accepted' });
-  };
-
-  // Getters
-  const getClientById = (id: string) => clients.find(client => client.id === id);
-  const getProductById = (id: string) => products.find(product => product.id === id);
-  const getInvoiceById = (id: string) => invoices.find(invoice => invoice.id === id);
-  const getQuoteById = (id: string) => quotes.find(quote => quote.id === id);
-  const getEmployeeById = (id: string) => employees.find(employee => employee.id === id);
-
-  // Employés
-  const addEmployee = async (employeeData: Omit<Employee, 'id' | 'createdAt' | 'entrepriseId'>) => {
+  const updateCompanySettings = async (settings: Partial<Company>): Promise<void> => {
     if (!user) return;
     
-    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
-    const entrepriseId = user.isAdmin ? user.id : user.id.split('_')[1] || user.id;
-    
     try {
-      await addDoc(collection(db, 'employees'), {
-        ...employeeData,
-        entrepriseId: entrepriseId,
-        createdAt: new Date().toISOString()
-      });
-    } catch (error) {
-      console.error('Erreur lors de l\'ajout de l\'employé:', error);
-    }
-  };
-
-  const updateEmployee = async (id: string, employeeData: Partial<Employee>) => {
-    try {
-      await updateDoc(doc(db, 'employees', id), {
-        ...employeeData,
+      await updateDoc(doc(db, 'entreprises', user.id), {
+        ...settings,
         updatedAt: new Date().toISOString()
       });
+      
+      // Mettre à jour l'état local immédiatement
+      setUser(prevUser => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            company: {
+              ...prevUser.company,
+              ...settings
+            }
+          };
+        }
+        return prevUser;
+      });
+      
     } catch (error) {
-      console.error('Erreur lors de la mise à jour de l\'employé:', error);
+      console.error('Erreur lors de la mise à jour des paramètres:', error);
+      throw error;
     }
   };
 
-  const deleteEmployee = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'employees', id));
-    } catch (error) {
-      console.error('Erreur lors de la suppression de l\'employé:', error);
-    }
-  };
-
-  // Heures supplémentaires
-  const addOvertime = async (overtimeData: Omit<Overtime, 'id' | 'createdAt' | 'entrepriseId'>) => {
+  const checkSubscriptionExpiryManual = async (): Promise<void> => {
     if (!user) return;
     
-    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
-    const entrepriseId = user.isAdmin ? user.id : user.id.split('_')[1] || user.id;
-    
     try {
-      await addDoc(collection(db, 'overtimes'), {
-        ...overtimeData,
-        entrepriseId: entrepriseId,
-        createdAt: new Date().toISOString()
-      });
+      const userDoc = await getDoc(doc(db, 'entreprises', user.id));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        await checkSubscriptionExpiry(user.id, userData);
+      }
     } catch (error) {
-      console.error('Erreur lors de l\'ajout des heures supplémentaires:', error);
+      console.error('Erreur lors de la vérification de l\'expiration:', error);
     }
   };
 
-  const updateOvertime = async (id: string, overtimeData: Partial<Overtime>) => {
+  const logout = async (): Promise<void> => {
     try {
-      await updateDoc(doc(db, 'overtimes', id), {
-        ...overtimeData,
-        updatedAt: new Date().toISOString()
-      });
+      await signOut(auth);
     } catch (error) {
-      console.error('Erreur lors de la mise à jour des heures supplémentaires:', error);
+      console.error('Erreur lors de la déconnexion:', error);
     }
   };
 
-  const deleteOvertime = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'overtimes', id));
-    } catch (error) {
-      console.error('Erreur lors de la suppression des heures supplémentaires:', error);
-    }
-  };
-
-  // Congés
-  const addLeave = async (leaveData: Omit<Leave, 'id' | 'createdAt' | 'entrepriseId'>) => {
-    if (!user) return;
-    
-    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
-    const entrepriseId = user.isAdmin ? user.id : user.id.split('_')[1] || user.id;
-    
-    try {
-      await addDoc(collection(db, 'leaves'), {
-        ...leaveData,
-        entrepriseId: entrepriseId,
-        createdAt: new Date().toISOString()
-      });
-    } catch (error) {
-      console.error('Erreur lors de l\'ajout du congé:', error);
-    }
-  };
-
-  const updateLeave = async (id: string, leaveData: Partial<Leave>) => {
-    try {
-      await updateDoc(doc(db, 'leaves', id), {
-        ...leaveData,
-        updatedAt: new Date().toISOString()
-      });
-    } catch (error) {
-      console.error('Erreur lors de la mise à jour du congé:', error);
-    }
-  };
-
-  const deleteLeave = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'leaves', id));
-    } catch (error) {
-      console.error('Erreur lors de la suppression du congé:', error);
-    }
-  };
   const value = {
-    clients,
-    products,
-    invoices,
-    quotes,
-    employees,
-    overtimes,
-    leaves,
-    addClient,
-    updateClient,
-    deleteClient,
-    addProduct,
-    updateProduct,
-    deleteProduct,
-    addInvoice,
-    updateInvoice,
-    deleteInvoice,
-    addQuote,
-    updateQuote,
-    deleteQuote,
-    convertQuoteToInvoice,
-    updateProductStock,
-    addEmployee,
-    updateEmployee,
-    deleteEmployee,
-    addOvertime,
-    updateOvertime,
-    deleteOvertime,
-    addLeave,
-    updateLeave,
-    deleteLeave,
-    getClientById,
-    getProductById,
-    getInvoiceById,
-    getQuoteById,
-    getEmployeeById,
-    updateInvoiceStatus: updateInvoice,
+    user,
+    firebaseUser,
+    isAuthenticated: !!user,
+    login,
+    register,
+    logout,
+    upgradeSubscription,
+    updateCompanySettings,
+    checkSubscriptionExpiry: checkSubscriptionExpiryManual,
     isLoading,
+    showExpiryAlert,
+    setShowExpiryAlert,
+    expiredDate,
   };
 
-  return (
-    <DataContext.Provider value={value}>
-      {children}
-    </DataContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export function useData() {
-  const context = useContext(DataContext);
+export function useAuth() {
+  const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useData must be used within a DataProvider');
+    throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 }
-

@@ -66,8 +66,10 @@ export default function EditUserModal({ isOpen, onClose, user }: EditUserModalPr
       });
       
       onClose();
+      alert('Utilisateur modifié avec succès !');
     } catch (error) {
-      alert('Erreur lors de la modification de l\'utilisateur');
+      console.error('Erreur lors de la modification:', error);
+      alert('Erreur lors de la modification de l\'utilisateur.');
     } finally {
       setIsSubmitting(false);
     }

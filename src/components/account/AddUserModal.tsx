@@ -98,8 +98,10 @@ export default function AddUserModal({ isOpen, onClose }: AddUserModalProps) {
         status: 'active'
       });
       onClose();
+      alert('Utilisateur créé avec succès ! Il peut maintenant se connecter avec ses identifiants.');
     } catch (error) {
-      alert('Erreur lors de la création de l\'utilisateur');
+      console.error('Erreur lors de la création:', error);
+      alert('Erreur lors de la création de l\'utilisateur. Vérifiez que l\'email n\'est pas déjà utilisé.');
     } finally {
       setIsSubmitting(false);
     }

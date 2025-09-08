@@ -54,7 +54,7 @@ export default function Sidebar({ open, setOpen, onUpgrade }: SidebarProps) {
   const handlePermissionClick = (e: React.MouseEvent, permission: string) => {
     if (!hasPermission(permission)) {
       e.preventDefault();
-      alert('Vous n\'avez pas accès à cette section. Contactez votre administrateur.');
+      alert('Vous n\'avez pas accès à cette section. Contactez l\'administrateur de votre entreprise.');
     }
   };
 

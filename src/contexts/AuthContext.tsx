@@ -39,6 +39,7 @@ interface User {
   email: string;
   role: 'admin' | 'user';
   isAdmin: boolean;
+  managedUserId?: string; // ID de l'utilisateur géré (si applicable)
   permissions?: {
     dashboard: boolean;
     invoices: boolean;
@@ -220,12 +221,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           
           // Créer l'objet utilisateur avec les permissions
           setUser({
-            id: managedUser.id,
+            id: managedUser.entrepriseId, // Utiliser l'ID de l'entreprise pour l'accès aux données
             name: managedUser.name,
             email: managedUser.email,
             role: 'user',
             isAdmin: false,
             permissions: managedUser.permissions,
+            managedUserId: managedUser.id, // Garder l'ID de l'utilisateur géré pour les opérations spécifiques
             company: {
               name: companyData.name,
               ice: companyData.ice,
@@ -370,7 +372,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async (): Promise<void> => {
     try {
-      await signOut(auth);
+      // Si c'est un utilisateur géré, pas besoin de signOut Firebase
+      if (user?.isAdmin) {
+        await signOut(auth);
+      } else {
+        // Pour les utilisateurs gérés, simplement nettoyer l'état local
+        setUser(null);
+        setFirebaseUser(null);
+      }
     } catch (error) {
       console.error('Erreur lors de la déconnexion:', error);
     }

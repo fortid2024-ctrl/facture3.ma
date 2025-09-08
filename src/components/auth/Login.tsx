@@ -22,10 +22,11 @@ export default function Login() {
     try {
       const success = await login(email, password);
       if (!success) {
-        setError('Email ou mot de passe incorrect');
+        setError('Email ou mot de passe incorrect. Vérifiez vos identifiants ou contactez votre administrateur.');
       }
     } catch (err) {
-      setError('Erreur de connexion');
+      console.error('Erreur de connexion:', err);
+      setError('Erreur de connexion. Veuillez réessayer.');
     } finally {
       setIsLoading(false);
     }

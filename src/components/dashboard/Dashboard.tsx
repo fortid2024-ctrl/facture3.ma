@@ -26,7 +26,7 @@ export default function Dashboard() {
       return `Bienvenue ${user.name} ! Vous êtes connecté en tant qu'administrateur.`;
     } else {
       const permissionCount = user?.permissions ? Object.values(user.permissions).filter(Boolean).length : 0;
-      return `Bienvenue ${user?.name} ! Vous avez accès à ${permissionCount} section${permissionCount > 1 ? 's' : ''}.`;
+      return `Bienvenue ${user?.name} ! Vous avez accès à ${permissionCount} section${permissionCount > 1 ? 's' : ''} de ${user?.company?.name}.`;
     }
   };
   return (

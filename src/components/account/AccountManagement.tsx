@@ -74,6 +74,7 @@ export default function AccountManagement() {
   const handleDeleteUser = (id: string) => {
     if (window.confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) {
       deleteUser(id);
+      alert('Utilisateur supprimé avec succès !');
     }
   };
 
@@ -89,6 +90,7 @@ export default function AccountManagement() {
       setNewPassword('');
       alert('Mot de passe réinitialisé avec succès !');
     } catch (error) {
+      console.error('Erreur lors de la réinitialisation:', error);
       alert('Erreur lors de la réinitialisation du mot de passe');
     }
   };

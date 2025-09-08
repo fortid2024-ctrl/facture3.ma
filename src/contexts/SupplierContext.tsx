@@ -128,7 +128,8 @@ export function SupplierProvider({ children }: { children: ReactNode }) {
     if (!isAuthenticated || !user) return;
 
     setIsLoading(true);
-    const entrepriseId = user.id;
+    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
+    const entrepriseId = user.isAdmin ? user.id : user.id;
 
     // Fournisseurs
     const suppliersQuery = query(
@@ -208,10 +209,13 @@ export function SupplierProvider({ children }: { children: ReactNode }) {
   const addSupplier = async (supplierData: Omit<Supplier, 'id' | 'createdAt' | 'entrepriseId'>) => {
     if (!user) return;
     
+    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
+    const entrepriseId = user.isAdmin ? user.id : user.id;
+    
     try {
       await addDoc(collection(db, 'suppliers'), {
         ...supplierData,
-        entrepriseId: user.id,
+        entrepriseId: entrepriseId,
         createdAt: new Date().toISOString()
       });
     } catch (error) {
@@ -242,10 +246,13 @@ export function SupplierProvider({ children }: { children: ReactNode }) {
   const addSupplierProduct = async (productData: Omit<SupplierProduct, 'id' | 'createdAt' | 'entrepriseId'>) => {
     if (!user) return;
     
+    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
+    const entrepriseId = user.isAdmin ? user.id : user.id;
+    
     try {
       await addDoc(collection(db, 'supplierProducts'), {
         ...productData,
-        entrepriseId: user.id,
+        entrepriseId: entrepriseId,
         createdAt: new Date().toISOString()
       });
     } catch (error) {
@@ -276,13 +283,16 @@ export function SupplierProvider({ children }: { children: ReactNode }) {
   const addPurchaseOrder = async (orderData: Omit<PurchaseOrder, 'id' | 'number' | 'createdAt' | 'entrepriseId'>) => {
     if (!user) return;
     
+    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
+    const entrepriseId = user.isAdmin ? user.id : user.id;
+    
     try {
       const orderNumber = generatePurchaseOrderNumber();
       
       await addDoc(collection(db, 'purchaseOrders'), {
         ...orderData,
         number: orderNumber,
-        entrepriseId: user.id,
+        entrepriseId: entrepriseId,
         createdAt: new Date().toISOString()
       });
     } catch (error) {
@@ -313,10 +323,13 @@ export function SupplierProvider({ children }: { children: ReactNode }) {
   const addSupplierPayment = async (paymentData: Omit<SupplierPayment, 'id' | 'createdAt' | 'entrepriseId'>) => {
     if (!user) return;
     
+    // Utiliser l'ID de l'entreprise admin pour tous les utilisateurs
+    const entrepriseId = user.isAdmin ? user.id : user.id;
+    
     try {
       await addDoc(collection(db, 'supplierPayments'), {
         ...paymentData,
-        entrepriseId: user.id,
+        entrepriseId: entrepriseId,
         createdAt: new Date().toISOString()
       });
     } catch (error) {
